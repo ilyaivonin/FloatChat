@@ -96,6 +96,14 @@ private struct MessageTextView: NSViewRepresentable {
         context.coordinator.scrollView = scrollView
         context.coordinator.wasEnabled = isEnabled
 
+        // File drops belong to the chat window (attach as an attachment);
+        // keep only text/RTF drops inside the editor itself.
+        let dragTypes = textView.registeredDraggedTypes.filter { $0 != .fileURL }
+        if !dragTypes.isEmpty {
+            textView.unregisterDraggedTypes()
+            textView.registerForDraggedTypes(dragTypes)
+        }
+
         DispatchQueue.main.async {
             context.coordinator.recalculateHeight()
             if isEnabled {

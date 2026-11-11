@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     @EnvironmentObject private var state: AppState
     @State private var stickToBottom = true
+    @State private var isDropTargeted = false
 
     private static let bottomAnchorID = "transcript-bottom"
 
@@ -19,9 +20,93 @@ struct ChatView: View {
         }
         .background(Palette.bg.ignoresSafeArea())
         .background(WindowConfigurator(alwaysOnTop: state.alwaysOnTop, title: state.displayName, opacity: state.opacity))
+        .overlay {
+            if isDropTargeted {
+                dropOverlay
+            }
+        }
+        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
+            acceptDroppedFiles(providers)
+        }
         .onAppear {
             WindowSupport.applyAlwaysOnTop(state.alwaysOnTop)
         }
+    }
+
+    private var dropOverlay: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Palette.accent.opacity(0.10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Palette.accent, style: StrokeStyle(lineWidth: 2, dash: [7, 5]))
+            )
+            .overlay(alignment: .bottom) {
+                Label(
+                    L10n.t("Отпустите файл, чтобы прикрепить", "Drop files to attach"),
+                    systemImage: "paperclip"
+                )
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Palette.text)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Palette.input, in: Capsule())
+                .padding(.bottom, 14)
+            }
+            .padding(8)
+            .allowsHitTesting(false)
+    }
+
+    private func acceptDroppedFiles(_ providers: [NSItemProvider]) -> Bool {
+        let fileProviders = providers.enumerated().filter {
+            $0.element.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+        }
+        guard !fileProviders.isEmpty else { return false }
+
+        var urls: [Int: URL] = [:]
+        let lock = NSLock()
+        let group = DispatchGroup()
+
+        for (index, provider) in fileProviders {
+            group.enter()
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                defer { group.leave() }
+                let url: URL?
+                if let data = item as? Data {
+                    url = URL(dataRepresentation: data, relativeTo: nil)
+                } else if let itemURL = item as? URL {
+                    url = itemURL
+                } else if let nsURL = item as? NSURL {
+                    url = nsURL as URL
+                } else {
+                    url = nil
+                }
+                if let url {
+                    lock.lock()
+                    urls[index] = url.standardizedFileURL
+                    lock.unlock()
+                }
+            }
+        }
+
+        group.notify(queue: .main) {
+            let ordered = fileProviders.compactMap { urls[$0.offset] }
+            let files = ordered.filter { url in
+                let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+                return !isDirectory && AttachmentLoader.isReadable(url)
+            }
+            Task { @MainActor in
+                guard !files.isEmpty else {
+                    state.attachmentError = L10n.t(
+                        "Можно перетащить только текстовые файлы (PDF, TXT, RTF, JSON, HTML…)",
+                        "Only text files can be dropped (PDF, TXT, RTF, JSON, HTML…)"
+                    )
+                    return
+                }
+                state.addAttachments(files)
+            }
+        }
+
+        return true
     }
 
     private var header: some View {
@@ -35,7 +120,7 @@ struct ChatView: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(Palette.muted)
                     .lineLimit(1)
-                Text(state.tokensPerSecond.map { String(format: "%.1f t/s", $0) } ?? (state.isGenerating ? L10n.t("считаю скорость…", "measuring…") : "— t/s"))
+                Text(speedCaption)
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundStyle(Palette.muted)
                     .lineLimit(1)
@@ -89,6 +174,21 @@ struct ChatView: View {
         case .failed: return Palette.danger
         case .stopped: return Palette.muted
         }
+    }
+
+    /// Real-time speed / progress from llama-server stderr (print_timing / n_gen).
+    private var speedCaption: String {
+        if let progress = state.promptProgress {
+            let tps = state.tokensPerSecond.map { String(format: "%.0f", $0) } ?? "—"
+            return "запрос \(Int(progress))% • \(tps) t/s"
+        }
+        if let tps = state.tokensPerSecond {
+            return String(format: "%.0f t/s", tps)
+        }
+        if state.isGenerating {
+            return "считаю скорость…"
+        }
+        return "— t/s"
     }
 
     private var transcript: some View {

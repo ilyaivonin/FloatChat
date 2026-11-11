@@ -11,10 +11,35 @@ final class AppState: ObservableObject {
     @Published var draft = ""
     @Published var isGenerating = false
     @Published var tokensPerSecond: Double?
+    /// Prompt-processing progress (0–100) from llama-server print_timing lines.
+    @Published var promptProgress: Double?
     @Published var log = ""
     @Published var errorText: String?
     @Published var pendingAttachments: [ChatAttachment] = []
     @Published var attachmentError: String?
+
+    /// Logs also go to ~/Documents/FloatChat/FloatChat.log
+    private let logFileURL: URL = {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let dir = docs.appendingPathComponent("FloatChat", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("FloatChat.log")
+    }()
+
+    private func appendLog(_ text: String) {
+        let line = "\(DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)) \(text)\n"
+        guard let data = line.data(using: String.Encoding.utf8) else { return }
+        if FileManager.default.fileExists(atPath: logFileURL.path) {
+            if let handle = try? FileHandle(forWritingTo: logFileURL) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                handle.closeFile()
+                return
+            }
+        }
+        try? data.write(to: logFileURL)
+    }
+
     @Published var lightMode: Bool {
         didSet {
             UserDefaults.standard.set(lightMode, forKey: WindowSupport.lightModeKey)
@@ -36,6 +61,7 @@ final class AppState: ObservableObject {
     private var generateTask: Task<Void, Never>?
     private var startTask: Task<Void, Never>?
     private var settingsWindow: NSWindow?
+    private var settingsHideObserver: NSObjectProtocol?
 
     init() {
         settings = SettingsStore.load()
@@ -44,6 +70,21 @@ final class AppState: ObservableObject {
         server.onLog = { [weak self] text in
             Task { @MainActor in
                 self?.log = text
+                self?.appendLog(text)
+            }
+        }
+        server.onTiming = { [weak self] event in
+            Task { @MainActor in
+                switch event.phase {
+                case .prompt:
+                    self?.promptProgress = event.progress
+                    if let tps = event.tokensPerSecond {
+                        self?.tokensPerSecond = tps
+                    }
+                case .generation:
+                    self?.promptProgress = nil
+                    self?.tokensPerSecond = event.tokensPerSecond
+                }
             }
         }
         installer.onInstalled = { [weak self] path in
@@ -121,6 +162,7 @@ final class AppState: ObservableObject {
 
     func openSettings() {
         if let window = settingsWindow {
+            WindowSupport.applyOpacity(settings.opacity, window: window)
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -147,11 +189,23 @@ final class AppState: ObservableObject {
         window.hidesOnDeactivate = false
         window.level = settings.alwaysOnTop ? .floating : .normal
         window.collectionBehavior.formUnion([.canJoinAllSpaces, .fullScreenAuxiliary])
+        WindowSupport.applyOpacity(settings.opacity, window: window)
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
         settingsWindow = window
+        settingsHideObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResignKeyNotification,
+            object: window,
+            queue: .main
+        ) { notification in
+            guard let window = notification.object as? NSWindow else { return }
+            // A file picker or a sheet keeps the settings window on screen.
+            guard NSApp.modalWindow == nil, window.attachedSheet == nil else { return }
+            guard window.isVisible, !window.isMiniaturized else { return }
+            window.orderOut(nil)
+        }
     }
 
     func closeSettings() {
@@ -159,6 +213,7 @@ final class AppState: ObservableObject {
     }
 
     func startServer() {
+        appendLog(L10n.t("Запуск сервера…", "Starting server…"))
         startTask?.cancel()
         guard !settings.modelPath.isEmpty else {
             let missingModel = L10n.t("Выберите модель .gguf в настройках", "Choose a .gguf model in settings")
@@ -227,6 +282,7 @@ final class AppState: ObservableObject {
     /// Full restart: the old llama-server process is stopped and a new one is started,
     /// so a changed model / context / port is actually applied.
     func restartServer() {
+        appendLog(L10n.t("Перезапуск сервера…", "Restarting server…"))
         generateTask?.cancel()
         generateTask = nil
         startTask?.cancel()
@@ -276,6 +332,8 @@ final class AppState: ObservableObject {
         draft = ""
         pendingAttachments = []
         attachmentError = nil
+        tokensPerSecond = nil
+        promptProgress = nil
         let content = text.isEmpty ? L10n.t("Посмотри вложенные файлы.", "Look at the attached files.") : text
         messages.append(ChatMessage(role: .user, content: content, attachments: attachments))
         messages.append(ChatMessage(role: .assistant, content: "", reasoning: ""))
@@ -300,6 +358,11 @@ final class AppState: ObservableObject {
             } catch is CancellationError {
                 // keep partial reply
             } catch {
+                if case ChatError.http(400) = error {
+                    self.clearChat()
+                    self.restartServer()
+                    return
+                }
                 if let index = self.messages.firstIndex(where: { $0.id == assistantID }) {
                     if self.messages[index].content.isEmpty {
                         self.messages[index].content = "⚠️ \(error.localizedDescription)"
