@@ -34,6 +34,24 @@ It stays on top of other windows, works without cloud services, and automaticall
 
 No unnecessary interfaces, subscriptions, or complicated setup. Just open the window, ask a question, and get back to what you were doing.
 
+---
+
+## 📚 Table of Contents
+
+- [Features](#-features)
+- [File Attachments](#-file-attachments)
+- [Compatibility](#️-compatibility)
+- [Installing FloatChat](#-installing)
+- [Building](#-building)
+- [How to Use](#-how-to-use)
+- [Installing llama.cpp](#️-installing-llamacpp)
+- [Setting Up a Model](#-setting-up-a-model)
+- [Project Structure](#-project-structure)
+- [Privacy & Security](#-privacy--security)
+- [License](#-license)
+
+---
+
 ## ✨ Features
 
 - **Always on Top** — keep the chat window above other applications.
@@ -179,6 +197,77 @@ dist/FloatChat-1.0.dmg
 ```
 
 The build scripts compile both architectures (`arm64` and `x86_64`) and combine them using `lipo`.
+
+## 🚀 How to Use
+
+Getting started with FloatChat takes just a few steps.
+
+### 1. Install llama.cpp
+
+1. Launch FloatChat.
+2. Open **Settings**.
+3. Find the llama.cpp installation section.
+4. Click **Install Automatically**.
+5. Wait for the download and installation to complete.
+
+FloatChat will automatically download and configure the appropriate llama.cpp build for your Mac.
+
+### 2. Download a Language Model
+
+FloatChat supports local GGUF language models. You can browse and download models directly through Hugging Face using the built-in Download Model button.
+
+1. Open FloatChat Settings.
+2. Click Download Model. FloatChat will open the Hugging Face models page in your browser.
+3. Find a GGUF model that suits your hardware and needs.
+
+For example, you can try [Qwen3.8-4B-Distill-GGUF](https://huggingface.co/empero-ai/Qwen3.8-4B-Distill-GGUF).
+
+4. Download the .gguf file to your Mac.
+
+### 3. Select Your Model
+
+1. Return to FloatChat Settings.
+2. Find the model selection section.
+3. Click **Browse…**.
+4. Select your downloaded `.gguf` file.
+
+### 4. Apply and Start
+
+1. Click **Apply and Restart**.
+2. FloatChat will restart the llama-server process using your selected model.
+3. Wait for the model to load.
+
+### 5. You're Ready!
+
+Check the application status bar.
+
+When everything is working correctly, you should see:
+
+- **Model Online** status.
+- A green status indicator.
+
+<badge color="success">Model Online</badge> <badge color="success">Green indicator</badge>
+
+Your local AI assistant is ready to use!
+
+No cloud accounts, API keys, or subscriptions required.
+
+### Quick Start Screenshots
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <strong>Step 1 — Install llama.cpp and configure Settings</strong><br><br>
+      <img src="docs/images/4.png" width="100%" alt="FloatChat llama.cpp installation and settings">
+    </td>
+    <td align="center" width="50%">
+      <strong>Step 2 — Select a model and start the server</strong><br><br>
+      <img src="docs/images/5.png" width="100%" alt="FloatChat model selection and online status">
+    </td>
+  </tr>
+</table>
+
+---
 
 ## ⚙️ Installing llama.cpp
 
