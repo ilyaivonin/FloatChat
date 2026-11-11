@@ -1,0 +1,22 @@
+.build/
+.swiftpm/
+dist/
+*.app
+*.dmg
+App/AppIcon.iconset/
+.DS_Store
+xcuserdata/
+DerivedData/
+
+# macOS
+.AppleDouble
+.LSOverride
+
+# Local models
+*.gguf
+*.ggml
+*.safetensors
+
+# Secrets
+.env
+.env.*
