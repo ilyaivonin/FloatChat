@@ -1,6 +1,32 @@
 # FloatChat 🐹
 
-**A tiny local AI assistant that is always within reach.**
+<p align="center">
+  <img src="docs/images/mainlogo.png" width="220" alt="FloatChat Logo">
+</p>
+
+<p align="center">
+  <strong>A tiny local AI assistant that is always within reach.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/ilyaivonin/FloatChat/releases/latest">
+    <img src="https://img.shields.io/github/v/release/ilyaivonin/FloatChat?display_name=tag&style=for-the-badge" alt="Latest Release">
+  </a>
+  <a href="https://github.com/ilyaivonin/FloatChat/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/ilyaivonin/FloatChat?style=for-the-badge" alt="License">
+  </a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-black?style=for-the-badge&logo=apple" alt="macOS 14+">
+  <img src="https://img.shields.io/badge/Swift-SwiftUI-orange?style=for-the-badge&logo=swift" alt="SwiftUI">
+  <img src="https://img.shields.io/badge/AI-100%25%20Local-blue?style=for-the-badge" alt="Local AI">
+</p>
+
+<p align="center">
+  <a href="https://github.com/ilyaivonin/FloatChat/releases/latest">
+    <img src="https://img.shields.io/badge/⬇%20DOWNLOAD-LATEST%20RELEASE-2ea44f?style=for-the-badge" alt="Download Latest Release">
+  </a>
+</p>
+
+---
 
 FloatChat is a lightweight floating chat window for running local language models through [llama.cpp](https://github.com/ggml-org/llama.cpp).
 
@@ -23,6 +49,8 @@ No unnecessary interfaces, subscriptions, or complicated setup. Just open the wi
 - **Convenient Input** — the message field expands up to five lines and supports scrolling for longer drafts.
 - **Keyboard Shortcuts** — paste using `⌘V` and `⌥V` in all text fields.
 - **Error Handling** — server crashes are reported immediately with an error message and a restart option.
+
+![FloatChat in action](docs/images/work.gif)
 
 ## 📎 File Attachments
 
@@ -52,37 +80,70 @@ It is not designed to compete with large cloud-based AI models. It is a lightwei
 
 ## 🚀 Installing
 
-Installation Guide
-Follow these steps to install and launch FloatChat on macOS.
-1. Download FloatChat
-1. Visit the FloatChat Releases page.
+### 1. Download FloatChat
+
+1. Visit the [FloatChat Releases](https://github.com/ilyaivonin/FloatChat/releases) page.
 2. Open the latest release.
-3. Download the FloatChat.dmg file.
-2. Install the application
-1. Open the downloaded FloatChat.dmg file.
+3. Download the `FloatChat.dmg` file.
+
+### 2. Install the application
+
+1. Open the downloaded `FloatChat.dmg` file.
 2. A Finder window will appear.
-3. Drag FloatChat.app into the Applications folder.
+3. Drag `FloatChat.app` into the **Applications** folder.
 4. Wait for the copy process to finish.
 5. Eject the mounted DMG.
-3. Launch FloatChat
-1. Open your Applications folder.
-2. Find FloatChat.
+
+### 3. Launch FloatChat
+
+1. Open your **Applications** folder.
+2. Find **FloatChat**.
 3. Double-click the application to launch it.
-Don't worry if macOS blocks the application. Since FloatChat is currently distributed without Apple Developer ID notarization, macOS Gatekeeper may prevent it from opening on the first launch.
+
+**Don't worry if macOS blocks the application.**
+
+Since FloatChat is currently distributed without Apple Developer ID notarization, macOS Gatekeeper may prevent it from opening on the first launch.
+
 This is expected for this development release.
-4. Allow FloatChat in macOS Security Settings
+
+### 4. Allow FloatChat in macOS Security Settings
+
 If macOS displays a security warning:
-1. Open System Settings.
-2. Navigate to Privacy & Security.
-3. Scroll down to the Security section.
+
+1. Open **System Settings**.
+2. Navigate to **Privacy & Security**.
+3. Scroll down to the **Security** section.
 4. Find the message stating that FloatChat was blocked.
-5. Click Open Anyway.
-5. Confirm the launch
+5. Click **Open Anyway**.
+
+### 5. Confirm the launch
+
 1. A confirmation dialog will appear.
-2. Click Open Anyway or Open, depending on the dialog.
+2. Click **Open Anyway** or **Open**, depending on the dialog.
 3. Authenticate using your Mac administrator password or Touch ID if requested.
+
 That's it! macOS will remember your decision, and you should be able to launch FloatChat normally from now on.
 
+### Installation Screenshots
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <strong>Step 1 — Download</strong><br><br>
+      <img src="docs/images/1.png" width="100%" alt="Download and open FloatChat DMG">
+    </td>
+    <td align="center" width="33%">
+      <strong>Step 2 — Install</strong><br><br>
+      <img src="docs/images/2.png" width="100%" alt="Move FloatChat to Applications">
+    </td>
+    <td align="center" width="33%">
+      <strong>Step 3 — Allow Access</strong><br><br>
+      <img src="docs/images/3.png" width="100%" alt="Allow FloatChat in Privacy and Security">
+    </td>
+  </tr>
+</table>
+
+---
 
 ## 🚀 Building
 
@@ -177,6 +238,7 @@ You can also configure the number of CPU threads and the server port.
 To apply a new model or configuration, click **"Apply and Restart"**. FloatChat will stop the current server process and launch it again with the updated settings.
 
 **Limitations:**
+
 - Up to 60,000 characters per file.
 - Up to 120,000 characters in total.
 - PDFs are processed using PDFKit.
@@ -190,6 +252,8 @@ FloatChat/
 │   └── FloatChat/     # Application source code
 ├── App/               # Info.plist and application icon
 ├── scripts/           # Build, DMG, and icon scripts
+├── docs
+│   └──images/         # README screenshots and media
 └── README.md
 ```
 
@@ -207,8 +271,13 @@ macOS Gatekeeper may require additional approval when launching the application 
 
 ## 📄 License
 
-MIT License
+This project is licensed under the MIT License.
+
+See the [LICENSE](LICENSE) file for details.
 
 ---
 
-**FloatChat — your AI, always within reach.** 🐹
+<p align="center">
+  <strong>FloatChat — your AI, always within reach.</strong><br>
+  🐹
+</p>
