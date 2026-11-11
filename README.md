@@ -24,6 +24,21 @@ No unnecessary interfaces, subscriptions, or complicated setup. Just open the wi
 - **Keyboard Shortcuts** — paste using `⌘V` and `⌥V` in all text fields.
 - **Error Handling** — server crashes are reported immediately with an error message and a restart option.
 
+## 📎 File Attachments
+
+You can attach the following file types to messages:
+
+- PDF
+- TXT
+- Markdown
+- CSV
+- JSON
+- RTF
+- HTML
+- Other text-based formats
+
+File contents are extracted locally and sent to the model along with your message.
+
 ## 🖥️ Compatibility
 
 - macOS 14 Sonoma or later.
@@ -35,12 +50,46 @@ FloatChat is designed for compact local models and everyday tasks: quick questio
 
 It is not designed to compete with large cloud-based AI models. It is a lightweight tool that is always there when you need it.
 
+## 🚀 Installing
+
+Installation Guide
+Follow these steps to install and launch FloatChat on macOS.
+1. Download FloatChat
+1. Visit the FloatChat Releases page.
+2. Open the latest release.
+3. Download the FloatChat.dmg file.
+2. Install the application
+1. Open the downloaded FloatChat.dmg file.
+2. A Finder window will appear.
+3. Drag FloatChat.app into the Applications folder.
+4. Wait for the copy process to finish.
+5. Eject the mounted DMG.
+3. Launch FloatChat
+1. Open your Applications folder.
+2. Find FloatChat.
+3. Double-click the application to launch it.
+Don't worry if macOS blocks the application. Since FloatChat is currently distributed without Apple Developer ID notarization, macOS Gatekeeper may prevent it from opening on the first launch.
+This is expected for this development release.
+4. Allow FloatChat in macOS Security Settings
+If macOS displays a security warning:
+1. Open System Settings.
+2. Navigate to Privacy & Security.
+3. Scroll down to the Security section.
+4. Find the message stating that FloatChat was blocked.
+5. Click Open Anyway.
+5. Confirm the launch
+1. A confirmation dialog will appear.
+2. Click Open Anyway or Open, depending on the dialog.
+3. Authenticate using your Mac administrator password or Touch ID if requested.
+That's it! macOS will remember your decision, and you should be able to launch FloatChat normally from now on.
+
+
 ## 🚀 Building
 
 Clone the repository:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/ilyaivonin/FloatChat.git
 cd FloatChat
 ```
 
@@ -126,21 +175,6 @@ Available configuration options:
 You can also configure the number of CPU threads and the server port.
 
 To apply a new model or configuration, click **"Apply and Restart"**. FloatChat will stop the current server process and launch it again with the updated settings.
-
-## 📎 File Attachments
-
-You can attach the following file types to messages:
-
-- PDF
-- TXT
-- Markdown
-- CSV
-- JSON
-- RTF
-- HTML
-- Other text-based formats
-
-File contents are extracted locally and sent to the model along with your message.
 
 **Limitations:**
 - Up to 60,000 characters per file.
