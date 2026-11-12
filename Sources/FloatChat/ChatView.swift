@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     @EnvironmentObject private var state: AppState
     @State private var stickToBottom = true
+    @State private var isDropTargeted = false
 
     private static let bottomAnchorID = "transcript-bottom"
 
@@ -19,9 +20,93 @@ struct ChatView: View {
         }
         .background(Palette.bg.ignoresSafeArea())
         .background(WindowConfigurator(alwaysOnTop: state.alwaysOnTop, title: state.displayName, opacity: state.opacity))
+        .overlay {
+            if isDropTargeted {
+                dropOverlay
+            }
+        }
+        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
+            acceptDroppedFiles(providers)
+        }
         .onAppear {
             WindowSupport.applyAlwaysOnTop(state.alwaysOnTop)
         }
+    }
+
+    private var dropOverlay: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Palette.accent.opacity(0.10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Palette.accent, style: StrokeStyle(lineWidth: 2, dash: [7, 5]))
+            )
+            .overlay(alignment: .bottom) {
+                Label(
+                    L10n.t("Отпустите файл, чтобы прикрепить", "Drop files to attach"),
+                    systemImage: "paperclip"
+                )
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Palette.text)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Palette.input, in: Capsule())
+                .padding(.bottom, 14)
+            }
+            .padding(8)
+            .allowsHitTesting(false)
+    }
+
+    private func acceptDroppedFiles(_ providers: [NSItemProvider]) -> Bool {
+        let fileProviders = providers.enumerated().filter {
+            $0.element.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+        }
+        guard !fileProviders.isEmpty else { return false }
+
+        var urls: [Int: URL] = [:]
+        let lock = NSLock()
+        let group = DispatchGroup()
+
+        for (index, provider) in fileProviders {
+            group.enter()
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                defer { group.leave() }
+                let url: URL?
+                if let data = item as? Data {
+                    url = URL(dataRepresentation: data, relativeTo: nil)
+                } else if let itemURL = item as? URL {
+                    url = itemURL
+                } else if let nsURL = item as? NSURL {
+                    url = nsURL as URL
+                } else {
+                    url = nil
+                }
+                if let url {
+                    lock.lock()
+                    urls[index] = url.standardizedFileURL
+                    lock.unlock()
+                }
+            }
+        }
+
+        group.notify(queue: .main) {
+            let ordered = fileProviders.compactMap { urls[$0.offset] }
+            let files = ordered.filter { url in
+                let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+                return !isDirectory && AttachmentLoader.isReadable(url)
+            }
+            Task { @MainActor in
+                guard !files.isEmpty else {
+                    state.attachmentError = L10n.t(
+                        "Можно перетащить только текстовые файлы (PDF, TXT, RTF, JSON, HTML…)",
+                        "Only text files can be dropped (PDF, TXT, RTF, JSON, HTML…)"
+                    )
+                    return
+                }
+                state.addAttachments(files)
+            }
+        }
+
+        return true
     }
 
     private var header: some View {
@@ -35,7 +120,11 @@ struct ChatView: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(Palette.muted)
                     .lineLimit(1)
-                Text(state.tokensPerSecond.map { String(format: "%.1f t/s", $0) } ?? (state.isGenerating ? L10n.t("считаю скорость…", "measuring…") : "— t/s"))
+                Text(speedCaption)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Palette.muted)
+                    .lineLimit(1)
+                Text(contextCaption)
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundStyle(Palette.muted)
                     .lineLimit(1)
@@ -91,6 +180,31 @@ struct ChatView: View {
         }
     }
 
+    /// Context usage: estimated tokens used / context window size.
+    private var contextCaption: String {
+        let total = state.settings.contextSize
+        let used = state.contextUsed
+        return "\(L10n.contextUsed(used, total))"
+    }
+
+    /// Real-time speed / progress from llama-server stderr (print_timing / n_gen).
+    private var speedCaption: String {
+        if let progress = state.promptProgress {
+            let tps = state.tokensPerSecond.map { String(format: "%.0f", $0) } ?? "—"
+            return L10n.t(
+                "запрос \(Int(progress))% • \(tps) t/s",
+                "prompt \(Int(progress))% • \(tps) t/s"
+            )
+        }
+        if let tps = state.tokensPerSecond {
+            return String(format: "%.0f t/s", tps)
+        }
+        if state.isGenerating {
+            return L10n.t("считаю скорость…", "measuring…")
+        }
+        return "— t/s"
+    }
+
     private var transcript: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
@@ -111,6 +225,10 @@ struct ChatView: View {
                     .padding(.vertical, 10)
                     .background(
                         ScrollPositionObserver { nearBottom in
+                            // While a reply streams in, the content grows under the
+                            // scroll view; ignore those transient "not at bottom"
+                            // readings so the transcript keeps following the model.
+                            guard !state.isGenerating else { return }
                             if nearBottom != stickToBottom {
                                 stickToBottom = nearBottom
                             }
@@ -137,11 +255,27 @@ struct ChatView: View {
                 }
             }
             .onChange(of: state.messages.last?.content) { _, _ in
+                if state.isGenerating {
+                    stickToBottom = true
+                }
+                scrollToBottom(proxy, animated: false)
+            }
+            .onChange(of: state.messages.last?.reasoning) { _, _ in
+                // "Thinking" text grows before the answer starts; follow it too.
+                if state.isGenerating {
+                    stickToBottom = true
+                }
                 scrollToBottom(proxy, animated: false)
             }
             .onChange(of: state.messages.count) { _, _ in
                 stickToBottom = true
                 scrollToBottom(proxy, animated: false)
+            }
+            .onChange(of: state.isGenerating) { _, isGenerating in
+                if isGenerating {
+                    stickToBottom = true
+                    scrollToBottom(proxy, animated: false)
+                }
             }
         }
     }
@@ -433,7 +567,8 @@ struct SettingsView: View {
     @EnvironmentObject private var installer: LlamaInstaller
     var onClose: () -> Void
 
-    private let modelPage = URL(string: "https://huggingface.co/empero-ai/Qwen3.8-4B-Distill-GGUF")!
+    @StateObject private var modelDownloader = ModelDownloader()
+    @State private var showDownloader = false
     @State private var showInfo = false
 
     private var serverExists: Bool {
@@ -453,6 +588,24 @@ struct SettingsView: View {
                     get: { state.appName },
                     set: { state.appName = $0 }
                 ))
+                HStack(spacing: 12) {
+                    Button(L10n.dialogHistory) {
+                        // Reveal ChatHistory.log (falls back to its folder if it
+                        // does not exist yet).
+                        if FileManager.default.fileExists(atPath: state.chatHistoryFileURL.path) {
+                            NSWorkspace.shared.activateFileViewerSelecting([state.chatHistoryFileURL])
+                        } else {
+                            NSWorkspace.shared.open(state.chatHistoryFileURL.deletingLastPathComponent())
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help(L10n.t("Открыть файл истории переписки", "Open the conversation history file"))
+                    Button(L10n.openLogsFolder) {
+                        NSWorkspace.shared.open(state.logFileURL.deletingLastPathComponent())
+                    }
+                    .buttonStyle(.link)
+                    .help(L10n.t("Открыть папку с логами", "Open the logs folder"))
+                }
                 VStack(alignment: .leading, spacing: 5) {
                     HStack {
                         Text(L10n.t("Прозрачность окна", "Window opacity"))
@@ -503,11 +656,30 @@ struct SettingsView: View {
                     .foregroundStyle(Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 Button {
-                    NSWorkspace.shared.open(modelPage)
+                    showDownloader = true
                 } label: {
-                    Label(L10n.t("Скачать модель на HuggingFace", "Download a model on HuggingFace"), systemImage: "arrow.down.circle")
+                    Label(L10n.t("Скачать модель…", "Download model…"), systemImage: "arrow.down.circle")
                 }
-                .help(modelPage.absoluteString)
+                .help(L10n.t("Открыть список моделей с прямыми ссылками", "Open the model list with direct links"))
+
+                Button {
+                    ModelDownloader.revealModelsFolder(selectedPath: state.settings.modelPath)
+                } label: {
+                    Label(L10n.t("Папка с моделями", "Models folder"), systemImage: "folder")
+                }
+                .help(L10n.t("Открыть папку с файлами .gguf", "Open the folder with .gguf files"))
+
+                if modelDownloader.isDownloading {
+                    HStack(spacing: 8) {
+                        ProgressView(value: modelDownloader.progress ?? 0)
+                            .progressViewStyle(.linear)
+                        Text(downloadPercentText)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Palette.muted)
+                        Button(L10n.t("Отменить", "Cancel")) { modelDownloader.cancel() }
+                            .font(.system(size: 10))
+                    }
+                }
                 HStack {
                     stepper("threads -t", value: $state.settings.threads, range: 1...32)
                     stepper("batch -tb", value: $state.settings.threadsBatch, range: 1...32)
@@ -566,6 +738,22 @@ struct SettingsView: View {
         }
         .frame(minWidth: 480, minHeight: 620)
         .background(Palette.header)
+        .sheet(isPresented: $showDownloader) {
+            ModelDownloadSheet(downloader: modelDownloader) {
+                showDownloader = false
+            }
+            .environmentObject(state)
+        }
+        .onAppear {
+            modelDownloader.onFinished = { [weak state] url in
+                state?.selectModel(at: url)
+            }
+        }
+    }
+
+    private var downloadPercentText: String {
+        guard let progress = modelDownloader.progress else { return "…" }
+        return "\(Int((progress * 100).rounded()))%"
     }
 
     private var appHeader: some View {
@@ -608,6 +796,20 @@ struct SettingsView: View {
             Text(L10n.t("О приложении", "About"))
                 .font(.headline)
                 .foregroundStyle(Palette.text)
+
+            Link(destination: URL(string: AppInfo.github)!) {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.left.forwardslash.chevron.right")
+                    Text("GitHub · ilyaivonin")
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Palette.text)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Palette.input, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .help(AppInfo.github)
 
             infoRow(L10n.t("Автор", "Author"), AppInfo.author)
             infoRow(L10n.t("Компания", "Company"), AppInfo.company)

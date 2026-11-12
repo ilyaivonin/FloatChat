@@ -48,8 +48,8 @@ struct ChatMessage: Identifiable, Equatable {
 final class ChatClient {
     private var session: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 600
-        config.timeoutIntervalForResource = 600
+        config.timeoutIntervalForRequest = 3600
+        config.timeoutIntervalForResource = 3600
         return URLSession(configuration: config)
     }()
 

@@ -198,6 +198,27 @@ dist/FloatChat-1.0.dmg
 
 The build scripts compile both architectures (`arm64` and `x86_64`) and combine them using `lipo`.
 
+### Model catalog (`models.json`)
+
+The list shown in **Settings → Download model…** is read from `models.json` in the project root. Edit the button titles, descriptions, sizes and direct `.gguf` links there, or replace the file with your own before building — the build scripts copy it into `FloatChat.app/Contents/Resources`.
+
+```json
+{
+  "models": [
+    {
+      "name": "Qwen3.8-4B — Q4_K_M",
+      "url": "https://huggingface.co/empero-ai/Qwen3.8-4B-Distill-GGUF/resolve/main/Qwen3.8-4B-Q4_K_M.gguf?download=true",
+      "size": "2.8 GB",
+      "text": "Описание (рус.)",
+      "text_en": "Description (English)",
+      "page": "https://huggingface.co/empero-ai/Qwen3.8-4B-Distill-GGUF"
+    }
+  ]
+}
+```
+
+Only `name` and `url` are required. `swift run` reads `models.json` from the working directory, so a catalog can be tried without rebuilding the app bundle. Downloaded models are stored in `~/Downloads/FloatChat`; logs and chat history stay in `~/Documents/FloatChat`.
+
 ## 🚀 How to Use
 
 Getting started with FloatChat takes just a few steps.

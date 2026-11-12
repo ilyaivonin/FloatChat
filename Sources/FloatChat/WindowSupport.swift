@@ -33,7 +33,7 @@ enum WindowSupport {
     }
 
     static func applyOpacity(_ opacity: Double, window: NSWindow? = nil) {
-        for item in targetWindows(window) where item.identifier != settingsWindowID {
+        for item in targetWindows(window) {
             item.alphaValue = clampedOpacity(opacity)
         }
     }

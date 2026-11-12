@@ -30,6 +30,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$UNIVERSAL" "$APP/Contents/MacOS/FloatChat"
 cp "$ROOT/App/Info.plist" "$APP/Contents/Info.plist"
 cp "$ROOT/App/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+cp "$ROOT/models.json" "$APP/Contents/Resources/models.json"
 chmod +x "$APP/Contents/MacOS/FloatChat"
 codesign --force --deep --sign - "$APP" >/dev/null
 

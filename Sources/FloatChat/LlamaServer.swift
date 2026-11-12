@@ -16,6 +16,16 @@ enum ServerStatus: Equatable {
     }
 }
 
+/// Parsed timing info from llama-server stderr (print_timing / n_gen lines).
+struct TimingEvent {
+    enum Phase { case prompt, generation }
+    var phase: Phase
+    /// 0–100 during prompt processing, nil during generation.
+    var progress: Double?
+    /// tokens per second, when available.
+    var tokensPerSecond: Double?
+}
+
 enum LlamaRuntime {
     static let server = LlamaServer()
 }
@@ -25,10 +35,23 @@ final class LlamaServer {
     private let logLimit = 80_000
     private(set) var log = ""
     var onLog: ((String) -> Void)?
+    /// One complete raw stderr/stdout line (including the trailing newline).
+    /// Used for the log file so each line is written exactly once.
+    var onLogLine: ((String) -> Void)?
+    /// Parsed timing events from llama-server stderr (prompt progress / generation t/s).
+    var onTiming: ((TimingEvent) -> Void)?
     /// Called on the main queue when a process we started dies without stop()/stopAndWait().
     var onUnexpectedExit: ((Int32) -> Void)?
 
     var isRunning: Bool { process?.isRunning == true }
+
+    /// Buffered partial lines from stderr so we can parse complete print_timing/n_gen lines.
+    private var lineBuffer = ""
+
+    static let promptRegex = try! NSRegularExpression(
+        pattern: #"progress\s*=\s*([0-9.]+).*t\s*=\s*[0-9.]+\s*s\s*/\s*([0-9.]+)\s*tokens per second"#)
+    static let genRegex = try! NSRegularExpression(
+        pattern: #"tg_(?:3s)?\s*=\s*([0-9.]+)"#)
 
     func isHealthy(_ settings: AppSettings) async -> Bool {
         await healthOK(settings.baseURL.appending(path: "health"))
@@ -170,11 +193,67 @@ final class LlamaServer {
     }
 
     private func appendLog(_ chunk: String) {
+        lineBuffer += chunk
+        while let nl = lineBuffer.firstIndex(of: "\n") {
+            var line = String(lineBuffer[..<nl])
+            // Terminal progress redraws use "\r"; keep only the final state so
+            // the log file does not collect one huge line per model load.
+            if let cr = line.lastIndex(of: "\r") {
+                line = String(line[line.index(after: cr)...])
+            }
+            lineBuffer = String(lineBuffer[lineBuffer.index(after: nl)...])
+            if !line.isEmpty {
+                processTimingLine(line)
+                onLogLine?(line + "\n")
+            }
+        }
+        // A trailing "\r" segment without a newline is still being overwritten.
+        if let cr = lineBuffer.lastIndex(of: "\r") {
+            lineBuffer = String(lineBuffer[lineBuffer.index(after: cr)...])
+        }
         log += chunk
         if log.count > logLimit {
             log = String(log.suffix(logLimit))
         }
         onLog?(log)
+    }
+
+    /// Extracts prompt-progress and generation t/s from a single stderr line.
+    private func processTimingLine(_ line: String) {
+        let range = NSRange(line.startIndex..<line.endIndex, in: line)
+
+        // Prompt processing:
+        // print_timing: id  1 | task 26 | prompt processing, n_tokens = 2663, progress = 0.84, t = 104.25 s / 25.54 tokens per second
+        if line.contains("prompt processing") {
+            if let match = LlamaServer.promptRegex.firstMatch(in: line, range: range),
+               match.numberOfRanges >= 3 {
+                let p = (line as NSString).substring(with: match.range(at: 1))
+                let t = (line as NSString).substring(with: match.range(at: 2))
+                let raw = Double(p) ?? 0
+                let percent = raw <= 1.0 ? raw * 100 : raw
+                let event = TimingEvent(
+                    phase: .prompt,
+                    progress: percent,
+                    tokensPerSecond: Double(t)
+                )
+                DispatchQueue.main.async { [weak self] in self?.onTiming?(event) }
+            }
+            return
+        }
+
+        // Generation:
+        // n_gen =   117, tg =   5.78 t/s, tg_3s =   5.51 t/s
+        if line.contains("n_gen") || line.contains("tg_3s") {
+            if let match = LlamaServer.genRegex.firstMatch(in: line, range: range),
+               match.numberOfRanges >= 2 {
+                let t = (line as NSString).substring(with: match.range(at: 1))
+                let event = TimingEvent(
+                    phase: .generation,
+                    tokensPerSecond: Double(t)
+                )
+                DispatchQueue.main.async { [weak self] in self?.onTiming?(event) }
+            }
+        }
     }
 }
 

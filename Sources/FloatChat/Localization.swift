@@ -20,4 +20,13 @@ enum L10n {
     static func t(_ ru: String, _ en: String) -> String {
         current == .ru ? ru : en
     }
+
+    // Context usage
+    static func contextUsed(_ used: Int, _ total: Int) -> String {
+        "\(used)/\(total)"
+    }
+
+    // Dialog history (computed so they follow the current language)
+    static var dialogHistory: String { t("История переписок", "Dialog history") }
+    static var openLogsFolder: String { t("Открыть папку логов", "Open logs folder") }
 }
