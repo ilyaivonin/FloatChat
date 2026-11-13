@@ -59,7 +59,7 @@ No unnecessary interfaces, subscriptions, or complicated setup. Just open the wi
 - **Fully Local** — interact with local models through llama.cpp, without cloud services.
 - **Automatic Server Management** — starts, stops, and restarts `llama-server` automatically.
 - **llama.cpp Installation** — download official builds from GitHub or use Homebrew as a fallback.
-- **Model Management** — select local GGUF models through the native file picker and open their Hugging Face pages.
+- **Model Management** — a built-in catalog of five ready-to-run GGUF models with direct download links, plus a native file picker for your own models.
 - **File Attachments** — attach PDF, TXT, MD, CSV, JSON, RTF, HTML, and other text-based files directly to messages.
 - **Performance Settings** — configure CPU threads, context size, server port, and generation parameters.
 - **Personalization** — rename the application and adjust window transparency.
@@ -117,12 +117,6 @@ It is not designed to compete with large cloud-based AI models. It is a lightwei
 1. Open your **Applications** folder.
 2. Find **FloatChat**.
 3. Double-click the application to launch it.
-
-**Don't worry if macOS blocks the application.**
-
-Since FloatChat is currently distributed without Apple Developer ID notarization, macOS Gatekeeper may prevent it from opening on the first launch.
-
-This is expected for this development release.
 
 ### 4. Allow FloatChat in macOS Security Settings
 
@@ -193,10 +187,11 @@ To create a distributable DMG:
 Output:
 
 ```text
-dist/FloatChat-1.0.dmg
+dist/FloatChat-<version>.dmg
 ```
 
-The build scripts compile both architectures (`arm64` and `x86_64`) and combine them using `lipo`.
+The DMG also contains `README.md` and, when present, `README_RU.md` from the project root.
+
 
 ### Model catalog (`models.json`)
 
@@ -238,12 +233,11 @@ FloatChat will automatically download and configure the appropriate llama.cpp bu
 FloatChat supports local GGUF language models. You can browse and download models directly through Hugging Face using the built-in Download Model button.
 
 1. Open FloatChat Settings.
-2. Click Download Model. FloatChat will open the Hugging Face models page in your browser.
-3. Find a GGUF model that suits your hardware and needs.
+2. Click **Download model…** — a popup with five ready-to-run models appears.
+3. Pick a model and click its download button. Files are saved to `~/Downloads/FloatChat`.
+4. You can also download any GGUF model manually and select it with **Browse…**.
 
-For example, you can try [Qwen3.8-4B-Distill-GGUF](https://huggingface.co/empero-ai/Qwen3.8-4B-Distill-GGUF).
-
-4. Download the .gguf file to your Mac.
+The button list, descriptions and links come from `models.json` in the project root, so you can customize the catalog before building.
 
 ### 3. Select Your Model
 
@@ -320,6 +314,19 @@ If GitHub is unavailable, FloatChat can fall back to:
 brew install llama.cpp
 ```
 
+The install and reinstall buttons sit to the right of the **llama.cpp** section header. **Install automatically** appears only when `llama-server` is missing; **Reinstall…** is always available.
+
+### Default settings
+
+| Setting | Default |
+|---|---:|
+| Context size (`ctx -c`) | 8,192 |
+| Port | 4,096 |
+| Threads (`threads -t`) | 4 |
+| Batch (`batch -tb`) | 4 |
+
+Threads, batch, context size and port are grouped under **Advanced settings**. Use **Reset settings** (to the right of *Always on top*) to restore these values.
+
 The appropriate build architecture is detected automatically:
 
 - `macos-arm64` — Apple Silicon.
@@ -341,7 +348,7 @@ Available configuration options:
 |---|---:|
 | Context size | 64,000 tokens |
 | Response token limit | 32,000 tokens |
-| Reasoning budget | 32,000 tokens |
+| Reasoning budget | 8,192 tokens |
 
 You can also configure the number of CPU threads and the server port.
 
@@ -362,9 +369,13 @@ FloatChat/
 │   └── FloatChat/     # Application source code
 ├── App/               # Info.plist and application icon
 ├── scripts/           # Build, DMG, and icon scripts
+├── App/               # Info.plist and application icon
 ├── docs
 │   └──images/         # README screenshots and media
-└── README.md
+├── models.json        # Model catalog for the download popup
+├── howto.md           # First-launch guide text
+├── README.md
+└── README_RU.md
 ```
 
 ## 🔒 Privacy & Security

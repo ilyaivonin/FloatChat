@@ -7,6 +7,7 @@ struct ChatView: View {
     @EnvironmentObject private var state: AppState
     @State private var stickToBottom = true
     @State private var isDropTargeted = false
+    @State private var showHowto = false
 
     private static let bottomAnchorID = "transcript-bottom"
 
@@ -25,11 +26,17 @@ struct ChatView: View {
                 dropOverlay
             }
         }
+        .sheet(isPresented: $showHowto) {
+            HowtoView()
+        }
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             acceptDroppedFiles(providers)
         }
         .onAppear {
             WindowSupport.applyAlwaysOnTop(state.alwaysOnTop)
+            if !UserDefaults.standard.bool(forKey: "floatchat.howtoShown") {
+                showHowto = true
+            }
         }
     }
 
@@ -146,6 +153,9 @@ struct ChatView: View {
             }
             headerButton(system: "gearshape", help: L10n.t("Настройки llama.cpp", "llama.cpp settings")) {
                 state.openSettings()
+            }
+            headerButton(system: "trash.fill", help: L10n.t("Очистить чат", "Clear chat")) {
+                state.clearChat()
             }
         }
         .padding(.horizontal, 12)
@@ -570,6 +580,7 @@ struct SettingsView: View {
     @StateObject private var modelDownloader = ModelDownloader()
     @State private var showDownloader = false
     @State private var showInfo = false
+    @State private var showAdvanced = false
 
     private var serverExists: Bool {
         FileManager.default.isExecutableFile(atPath: state.settings.serverPath)
@@ -636,11 +647,39 @@ struct SettingsView: View {
 
                 Divider().opacity(0.25)
 
-                Text("llama.cpp")
-                    .font(.headline)
-                    .foregroundStyle(Palette.text)
+                HStack(spacing: 8) {
+                    Text("llama.cpp")
+                        .font(.headline)
+                        .foregroundStyle(Palette.text)
+                    Spacer()
+                    HStack(spacing: 6) {
+                        Image(systemName: serverExists ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(serverExists ? Palette.online : Palette.warn)
+                        Text(serverExists ? L10n.t("llama-server найден", "llama-server found") : L10n.t("llama-server не найден", "llama-server not found"))
+                            .font(.system(size: 10))
+                            .foregroundStyle(Palette.muted)
+                        if !serverExists {
+                            Button {
+                                installer.install()
+                            } label: {
+                                Text(installer.isBusy ? L10n.t("Установка…", "Installing…") : L10n.t("Установить автоматически", "Install automatically"))
+                                    .font(.system(size: 11))
+                            }
+                            .disabled(installer.isBusy)
+                            .buttonStyle(.plain)
+                            .help(L10n.t("Скачать официальную сборку llama.cpp с GitHub и прописать путь автоматически", "Download the official llama.cpp build from GitHub and set the path automatically"))
+                        }
+                        Button(L10n.t("Переустановить…", "Reinstall…")) {
+                            chooseInstallFolder()
+                        }
+                        .disabled(installer.isBusy)
+                        .buttonStyle(.plain)
+                        .help(L10n.t("Скачать свежую сборку llama.cpp в выбранную папку (существующая установка не проверяется)", "Download a fresh llama.cpp build into the selected folder (an existing installation is not checked)"))
+                    }
+                }
                 pathField("llama-server", text: $state.settings.serverPath, prompt: L10n.t("Выбрать llama-server", "Choose llama-server"))
-                installRow
+                installProgress
                 pathField(L10n.t("Модель .gguf", "Model .gguf"), text: $state.settings.modelPath, prompt: L10n.t("Выбрать модель .gguf", "Choose a .gguf model"))
                 HStack(spacing: 5) {
                     Image(systemName: modelExists ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
@@ -655,19 +694,21 @@ struct SettingsView: View {
                     .font(.caption2)
                     .foregroundStyle(Palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                Button {
-                    showDownloader = true
-                } label: {
-                    Label(L10n.t("Скачать модель…", "Download model…"), systemImage: "arrow.down.circle")
-                }
-                .help(L10n.t("Открыть список моделей с прямыми ссылками", "Open the model list with direct links"))
+                HStack(spacing: 8) {
+                    Button {
+                        showDownloader = true
+                    } label: {
+                        Label(L10n.t("Скачать модель…", "Download model…"), systemImage: "arrow.down.circle")
+                    }
+                    .help(L10n.t("Открыть список моделей с прямыми ссылками", "Open the model list with direct links"))
 
-                Button {
-                    ModelDownloader.revealModelsFolder(selectedPath: state.settings.modelPath)
-                } label: {
-                    Label(L10n.t("Папка с моделями", "Models folder"), systemImage: "folder")
+                    Button {
+                        ModelDownloader.revealModelsFolder(selectedPath: state.settings.modelPath)
+                    } label: {
+                        Label(L10n.t("Папка с моделями", "Models folder"), systemImage: "folder")
+                    }
+                    .help(L10n.t("Открыть папку с файлами .gguf", "Open the folder with .gguf files"))
                 }
-                .help(L10n.t("Открыть папку с файлами .gguf", "Open the folder with .gguf files"))
 
                 if modelDownloader.isDownloading {
                     HStack(spacing: 8) {
@@ -680,13 +721,15 @@ struct SettingsView: View {
                             .font(.system(size: 10))
                     }
                 }
-                HStack {
-                    stepper("threads -t", value: $state.settings.threads, range: 1...32)
-                    stepper("batch -tb", value: $state.settings.threadsBatch, range: 1...32)
-                }
-                HStack {
-                    stepper("ctx -c", value: $state.settings.contextSize, range: 512...64000, step: 512)
-                    stepper("port", value: $state.settings.port, range: 1024...65535)
+                DisclosureGroup(L10n.t("Тонкие настройки", "Advanced settings"), isExpanded: $showAdvanced) {
+                    HStack {
+                        stepper("threads -t", value: $state.settings.threads, range: 1...32)
+                        stepper("batch -tb", value: $state.settings.threadsBatch, range: 1...32)
+                    }
+                    HStack {
+                        stepper("ctx -c", value: $state.settings.contextSize, range: 512...64000, step: 512)
+                        stepper("port", value: $state.settings.port, range: 1024...65535)
+                    }
                 }
                 NumberSlider(
                     title: L10n.t("Максимум токенов ответа", "Max response tokens"),
@@ -698,7 +741,7 @@ struct SettingsView: View {
                 NumberSlider(
                     title: L10n.t("Бюджет рассуждений", "Reasoning budget"),
                     value: $state.settings.reasoningBudget,
-                    range: 0...32000,
+                    range: 0...8192,
                     step: 64
                 )
                 HStack(spacing: 8) {
@@ -711,6 +754,11 @@ struct SettingsView: View {
                     Text(L10n.t("Поверх всех окон", "Always on top"))
                         .foregroundStyle(Palette.text)
                     Spacer()
+                    Button(L10n.t("Сбросить настройки", "Reset settings")) {
+                        resetSettings()
+                    }
+                    .font(.system(size: 11))
+                    .buttonStyle(.plain)
                 }
                 HStack {
                     Button(L10n.t("Очистить чат", "Clear chat")) { state.clearChat() }
@@ -839,44 +887,8 @@ struct SettingsView: View {
         }
     }
 
-    private var installRow: some View {
+    private var installProgress: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Image(systemName: serverExists ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(serverExists ? Palette.online : Palette.warn)
-
-                Text(serverExists ? L10n.t("llama-server найден", "llama-server found") : L10n.t("llama-server не найден", "llama-server not found"))
-                    .font(.system(size: 11))
-                    .foregroundStyle(Palette.muted)
-
-                Spacer()
-            }
-
-            HStack(spacing: 8) {
-                if !serverExists {
-                    Button {
-                        installer.install()
-                    } label: {
-                        HStack(spacing: 5) {
-                            if installer.isBusy {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                            Text(installer.isBusy ? L10n.t("Установка…", "Installing…") : L10n.t("Установить автоматически", "Install automatically"))
-                        }
-                    }
-                    .disabled(installer.isBusy)
-                    .help(L10n.t("Скачать официальную сборку llama.cpp с GitHub и прописать путь автоматически", "Download the official llama.cpp build from GitHub and set the path automatically"))
-                }
-
-                Button(L10n.t("Переустановить…", "Reinstall…")) {
-                    chooseInstallFolder()
-                }
-                .disabled(installer.isBusy)
-                .help(L10n.t("Скачать свежую сборку llama.cpp в выбранную папку (существующая установка не проверяется)", "Download a fresh llama.cpp build into the selected folder (an existing installation is not checked)"))
-            }
-
             if installer.isBusy {
                 if let progress = installer.progress {
                     ProgressView(value: progress)
@@ -982,6 +994,11 @@ struct SettingsView: View {
             }
         }
     }
+
+    private func resetSettings() {
+        state.settings = AppSettings.default
+        SettingsStore.save(state.settings)
+    }
 }
 
 /// Slider with a numeric input field, used for token limits.
@@ -1075,6 +1092,87 @@ private struct NumberSlider: View {
         if value != parsed {
             value = parsed
         }
+    }
+}
+
+/// First-launch "how to use" popup. Text is loaded from howto.md in the app
+/// bundle (or the working directory when running via `swift run`).
+private struct HowtoView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var dontShowAgain = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L10n.t("Как пользоваться", "How to use"))
+                .font(.headline)
+                .foregroundStyle(Palette.text)
+
+            ScrollView {
+                Text(howtoText)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Palette.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxHeight: 300)
+
+            HStack {
+                Toggle(L10n.t("Не показывать снова", "Don't show again"), isOn: $dontShowAgain)
+                    .toggleStyle(.checkbox)
+                    .font(.system(size: 11))
+                Spacer()
+                Button(L10n.t("Закрыть", "Close")) {
+                    if dontShowAgain {
+                        UserDefaults.standard.set(true, forKey: "floatchat.howtoShown")
+                    }
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+        .frame(width: 460, height: 460)
+        .background(Palette.bg)
+    }
+
+    private var howtoText: String {
+        if let url = howtoURL(),
+           let data = try? Data(contentsOf: url),
+           let text = String(data: data, encoding: .utf8), !text.isEmpty {
+            return text
+        }
+        return L10n.t(
+            """
+            1. Установите llama-server через кнопку «Установить» рядом с заголовком llama.cpp.
+            2. Скачайте модель .gguf через «Скачать модель…» или укажите свой файл в настройках.
+            3. Нажмите «Применить и перезапустить».
+            4. Напишите сообщение в чат — модель ответит локально на вашем Mac.
+
+            Используйте метлу в заголовке чата, чтобы очистить историю сообщений.
+            """,
+            """
+            1. Install llama-server via the Install button next to the llama.cpp header.
+            2. Download a .gguf model via Download model… or specify your own file in settings.
+            3. Press Apply and restart.
+            4. Type a message in the chat — the model will reply locally on your Mac.
+
+            Use the broom icon in the chat header to clear the message history.
+            """
+        )
+    }
+
+    private func howtoURL() -> URL? {
+        if let resources = Bundle.main.resourceURL {
+            let url = resources.appendingPathComponent("howto.md")
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+        }
+        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("howto.md")
+        if FileManager.default.fileExists(atPath: cwd.path) {
+            return cwd
+        }
+        return nil
     }
 }
 

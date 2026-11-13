@@ -21,9 +21,9 @@ struct AppSettings: Equatable {
         modelPath: "",
         threads: 4,
         threadsBatch: 4,
-        contextSize: 4096,
+        contextSize: 8192,
         host: "127.0.0.1",
-        port: 18765,
+        port: 4096,
         alwaysOnTop: true,
         maxTokens: 2048,
         reasoningBudget: 192
@@ -41,7 +41,6 @@ struct AppSettings: Equatable {
 
 enum SettingsStore {
     private static let key = "floatchat.settings.v1"
-    private static let defaultsMigrationKey = "floatchat.settings.defaults.v2"
 
     static func load() -> AppSettings {
         guard
@@ -52,21 +51,9 @@ enum SettingsStore {
         }
         var settings = decoded.asSettings
 
-        // Move untouched installations to the new defaults (context 4096, reasoning 192).
-        if !UserDefaults.standard.bool(forKey: defaultsMigrationKey) {
-            UserDefaults.standard.set(true, forKey: defaultsMigrationKey)
-            var migrated = settings
-            if migrated.contextSize == 8192 { migrated.contextSize = 4096 }
-            if migrated.reasoningBudget == 512 { migrated.reasoningBudget = 192 }
-            if migrated != settings {
-                settings = migrated
-                save(settings)
-            }
-        }
-
         // Older builds allowed higher limits; keep the stored value inside the current range.
         let clampedMaxTokens = min(max(settings.maxTokens, 256), 32_000)
-        let clampedReasoning = min(max(settings.reasoningBudget, 0), 32_000)
+        let clampedReasoning = min(max(settings.reasoningBudget, 0), 8_192)
         if clampedMaxTokens != settings.maxTokens || clampedReasoning != settings.reasoningBudget {
             settings.maxTokens = clampedMaxTokens
             settings.reasoningBudget = clampedReasoning
